@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Blocked - Focus Mode</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    .icon {
+      font-size: 80px;
+      margin-bottom: 30px;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.1);
+      }
+    }
+    
+    h1 {
+      font-size: 36px;
+      margin-bottom: 15px;
+      font-weight: 600;
+    }
+    
+    p {
+      font-size: 18px;
+      opacity: 0.9;
+      line-height: 1.6;
+      max-width: 500px;
+    }
+    
+    .subtitle {
+      font-size: 14px;
+      margin-top: 30px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <div class="icon">🚫</div>
+  <h1>Website Blocked</h1>
+  <p>This site is blocked during your Pomodoro focus session.</p>
+  <p class="subtitle">Stay focused! You can access this site after your timer ends.</p>
+</body>
+</html>
+

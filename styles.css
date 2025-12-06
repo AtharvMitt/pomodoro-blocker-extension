@@ -1,0 +1,300 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 380px;
+  min-height: 500px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #333;
+}
+
+.container {
+  background: white;
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  text-align: center;
+  position: relative;
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.status {
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 12px;
+  border-radius: 12px;
+  display: inline-block;
+  font-weight: 500;
+}
+
+.status.active {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+/* Timer Section */
+.timer-section {
+  padding: 25px 20px;
+  text-align: center;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.timer-display {
+  font-size: 48px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 20px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+}
+
+.timer-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+  justify-content: center;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex: 1;
+  max-width: 100px;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #5568d3;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: #5a6268;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #c82333;
+}
+
+.btn-add {
+  background: #28a745;
+  color: white;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
+.btn-add:hover {
+  background: #218838;
+}
+
+.timer-presets {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+.preset-btn {
+  padding: 6px 12px;
+  border: 2px solid #667eea;
+  background: white;
+  color: #667eea;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preset-btn:hover {
+  background: #667eea;
+  color: white;
+}
+
+.preset-btn.active {
+  background: #667eea;
+  color: white;
+}
+
+/* Blocklist Section */
+.blocklist-section {
+  padding: 20px;
+  flex: 1;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.section-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.badge {
+  background: #667eea;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.add-site-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.site-input {
+  flex: 1;
+  padding: 10px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.site-input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.blocklist-container {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.blocklist {
+  list-style: none;
+}
+
+.blocklist li {
+  background: #f8f9fa;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background 0.2s;
+}
+
+.blocklist li:hover {
+  background: #e9ecef;
+}
+
+.site-name {
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+}
+
+.remove-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.remove-btn:hover {
+  background: #c82333;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 30px 20px;
+  color: #6c757d;
+  font-size: 13px;
+}
+
+.empty-state.hidden {
+  display: none;
+}
+
+/* Info Section */
+.info-section {
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-top: 1px solid #e0e0e0;
+}
+
+.info-text {
+  font-size: 12px;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
+/* Scrollbar */
+.blocklist-container::-webkit-scrollbar {
+  width: 6px;
+}
+
+.blocklist-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.blocklist-container::-webkit-scrollbar-thumb {
+  background: #667eea;
+  border-radius: 3px;
+}
+
+.blocklist-container::-webkit-scrollbar-thumb:hover {
+  background: #5568d3;
+}

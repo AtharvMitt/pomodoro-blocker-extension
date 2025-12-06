@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="styles.css">
+  <title>Pomodoro Focus Mode</title>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🍅 Pomodoro Focus</h1>
+      <div class="status" id="status">Inactive</div>
+    </div>
+
+    <!-- Timer Section -->
+    <div class="timer-section">
+      <div class="timer-display">
+        <span id="time">25:00</span>
+      </div>
+      <div class="timer-controls">
+        <button id="start" class="btn btn-primary">Start</button>
+        <button id="pause" class="btn btn-secondary" style="display: none;">Pause</button>
+        <button id="resume" class="btn btn-secondary" style="display: none;">Resume</button>
+        <button id="stop" class="btn btn-danger">Stop</button>
+      </div>
+      <div class="timer-presets">
+        <button class="preset-btn" data-minutes="25">25 min</button>
+        <button class="preset-btn" data-minutes="45">45 min</button>
+        <button class="preset-btn" data-minutes="60">60 min</button>
+      </div>
+    </div>
+
+    <!-- Blocklist Section -->
+    <div class="blocklist-section">
+      <div class="section-header">
+        <h3>🚫 Blocked Websites</h3>
+        <span class="badge" id="blockCount">0</span>
+      </div>
+      
+      <div class="add-site-form">
+        <input 
+          type="text" 
+          id="newSite" 
+          placeholder="e.g., reddit.com" 
+          class="site-input"
+        />
+        <button id="addSite" class="btn btn-add">Add</button>
+      </div>
+
+      <div class="blocklist-container">
+        <ul id="blockList" class="blocklist"></ul>
+        <div id="emptyState" class="empty-state">
+          <p>No blocked sites yet. Add sites to block during focus mode.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info Section -->
+    <div class="info-section">
+      <p class="info-text">
+        <strong>Focus Mode:</strong> Blocks distracting websites and filters YouTube content to educational videos only.
+      </p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
