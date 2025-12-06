@@ -1,7 +1,25 @@
-// YouTube content filtering for focus mode
-// Inject CSS early to work with dynamic content loading
+// YouTube content filtering for focus mode with AI model
+// Uses trained ML model to classify videos as educational or entertainment
 
 console.log("YouTube content script loaded at document_start");
+
+let videoClassifier = null;
+
+// Load the ML model
+async function loadVideoClassifier() {
+  if (videoClassifier) return videoClassifier;
+  
+  try {
+    const response = await fetch(chrome.runtime.getURL('models/model_for_extension.json'));
+    const modelData = await response.json();
+    videoClassifier = new VideoClassifier(modelData);
+    console.log("ML model loaded successfully");
+    return videoClassifier;
+  } catch (error) {
+    console.error("Error loading ML model:", error);
+    return null;
+  }
+}
 
 // Inject CSS immediately - this will work even as content loads dynamically
 function injectFocusModeCSS() {
@@ -112,6 +130,105 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', injectFocusModeCSS);
 }
 
+// Extract video title and description from page
+function getVideoMetadata() {
+  let title = '';
+  let description = '';
+  
+  // Try multiple selectors for title
+  const titleSelectors = [
+    'h1.ytd-watch-metadata yt-formatted-string',
+    'h1.ytd-video-primary-info-renderer yt-formatted-string',
+    'yt-formatted-string.style-scope.ytd-watch-metadata',
+    'meta[property="og:title"]',
+    'h1[class*="watch"]'
+  ];
+  
+  for (const selector of titleSelectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      title = element.textContent || element.getAttribute('content') || element.innerText || '';
+      if (title) break;
+    }
+  }
+  
+  // Try multiple selectors for description
+  const descSelectors = [
+    '#description yt-formatted-string',
+    '#description-text',
+    'meta[property="og:description"]',
+    'ytd-expander[class*="description"]'
+  ];
+  
+  for (const selector of descSelectors) {
+    const element = document.querySelector(selector);
+    if (element) {
+      description = element.textContent || element.getAttribute('content') || element.innerText || '';
+      if (description) break;
+    }
+  }
+  
+  // Limit description length
+  description = description.substring(0, 500);
+  
+  return { title: title.trim(), description: description.trim() };
+}
+
+// Check if video is educational using ML model
+async function checkVideoWithModel() {
+  try {
+    // Load model if not already loaded
+    const classifier = await loadVideoClassifier();
+    if (!classifier) {
+      console.log("Model not available, allowing video");
+      return true; // Allow if model fails to load
+    }
+    
+    // Get video metadata
+    const { title, description } = getVideoMetadata();
+    
+    if (!title) {
+      console.log("Could not extract title, allowing video");
+      return true; // Allow if we can't get title
+    }
+    
+    console.log("Video title:", title);
+    console.log("Video description:", description.substring(0, 100) + "...");
+    
+    // Predict using ML model
+    const result = classifier.predict(title, description);
+    
+    // Validate result
+    if (!result || result.prediction === undefined) {
+      console.error("Invalid prediction result:", result);
+      return true; // Allow on invalid result
+    }
+    
+    // Check for NaN values
+    if (isNaN(result.probability) || isNaN(result.confidence)) {
+      console.error("NaN detected in prediction result:", result);
+      console.log("Model data check:", {
+        type: classifier.modelType,
+        hasCoefficients: !!classifier.coefficients,
+        hasIntercept: classifier.intercept !== undefined,
+        coefficientsLength: classifier.coefficients?.length,
+        featuresLength: classifier.maxFeatures
+      });
+      return true; // Allow on NaN (safer to allow than block)
+    }
+    
+    console.log("ML Prediction:", result.prediction === 1 ? "Educational" : "Entertainment");
+    console.log("Confidence:", (result.confidence * 100).toFixed(2) + "%");
+    console.log("Probability:", (result.probability * 100).toFixed(2) + "%");
+    
+    // Return true if educational (prediction === 1), false if entertainment
+    return result.prediction === 1;
+  } catch (error) {
+    console.error("Error checking video with model:", error);
+    return true; // Allow on error
+  }
+}
+
 // Check focus mode and handle page blocking
 async function checkFocusMode() {
   try {
@@ -167,9 +284,48 @@ async function checkFocusMode() {
       return;
     }
     
-    // For video pages, CSS will handle hiding distractions automatically
+    // CHECK VIDEO PAGE - Use ML model to classify
     if (path.includes("/watch")) {
-      console.log("On video page - CSS will hide distractions");
+      console.log("On video page - checking with ML model");
+      
+      // Wait for page to load a bit, then check
+      setTimeout(async () => {
+        const isEducational = await checkVideoWithModel();
+        
+        if (!isEducational) {
+          // Block entertainment video
+          console.log("Entertainment video detected - blocking");
+          
+          // Wait for body to exist
+          const waitForBody = setInterval(() => {
+            if (document.body) {
+              clearInterval(waitForBody);
+              document.body.innerHTML = `
+                <div style="
+                  display: flex;
+                  flex-direction: column;
+                  align-items: center;
+                  justify-content: center;
+                  height: 100vh;
+                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                  color: white;
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                  text-align: center;
+                  padding: 20px;
+                ">
+                  <h1 style="font-size: 48px; margin-bottom: 20px;">❌</h1>
+                  <h2 style="font-size: 28px; margin-bottom: 10px; font-weight: 600;">Entertainment Content Blocked</h2>
+                  <p style="font-size: 16px; opacity: 0.9;">Focus Mode is Active</p>
+                  <p style="font-size: 14px; margin-top: 20px; opacity: 0.8;">Only educational videos are allowed during focus time</p>
+                </div>
+              `;
+            }
+          }, 10);
+        } else {
+          // Allow educational video - CSS already hides distractions
+          console.log("Educational video detected - allowing with distractions removed");
+        }
+      }, 1000); // Wait 1 second for page to load
     }
   } catch (error) {
     console.error("Error in YouTube blocking:", error);
