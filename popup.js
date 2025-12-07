@@ -1,11 +1,9 @@
 // Default blocked sites
 const DEFAULT_BLOCKLIST = [
   "instagram.com",
-  "tiktok.com",
   "reddit.com",
   "netflix.com",
   "hotstar.com",
-  "steampowered.com",
   "roblox.com"
 ];
 
@@ -17,9 +15,9 @@ let timerStartTime = null;
 let savedSeconds = null;
 let isBreak = false;
 let breakSeconds = 0;
-let sessionDuration = 25 * 60; // Track the session duration for break calculation
-let totalRuntime = 0; // Total runtime across all cycles in seconds
-let sessionStartTime = null; // Track when current session started
+let sessionDuration = 25 * 60;
+let totalRuntime = 0;
+let sessionStartTime = null;
 
 // DOM elements
 const timeDisplay = document.getElementById("time");
