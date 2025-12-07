@@ -15,6 +15,11 @@ let interval = null;
 let isPaused = false;
 let timerStartTime = null;
 let savedSeconds = null;
+let isBreak = false;
+let breakSeconds = 0;
+let sessionDuration = 25 * 60; // Track the session duration for break calculation
+let totalRuntime = 0; // Total runtime across all cycles in seconds
+let sessionStartTime = null; // Track when current session started
 
 // DOM elements
 const timeDisplay = document.getElementById("time");
@@ -29,9 +34,10 @@ const emptyStateEl = document.getElementById("emptyState");
 const newSiteInput = document.getElementById("newSite");
 const addSiteBtn = document.getElementById("addSite");
 const presetBtns = document.querySelectorAll(".preset-btn");
+const totalRuntimeEl = document.getElementById("totalRuntime");
 
 // Initialize on popup open
-chrome.storage.sync.get(["blocklist", "focus", "timerSeconds", "timerStartTime", "isPaused"], data => {
+chrome.storage.sync.get(["blocklist", "focus", "timerSeconds", "timerStartTime", "isPaused", "isBreak", "breakSeconds", "sessionDuration", "totalRuntime", "sessionStartTime"], data => {
   // Initialize blocklist
   if (!data.blocklist) {
     chrome.storage.sync.set({ blocklist: DEFAULT_BLOCKLIST });
@@ -46,18 +52,52 @@ chrome.storage.sync.get(["blocklist", "focus", "timerSeconds", "timerStartTime",
     updateTimeDisplay();
   }
 
+  // Restore break state
+  if (data.isBreak !== undefined) {
+    isBreak = data.isBreak;
+  }
+  if (data.breakSeconds !== undefined) {
+    breakSeconds = data.breakSeconds;
+  }
+  if (data.sessionDuration !== undefined) {
+    sessionDuration = data.sessionDuration;
+  } else {
+    // Initialize session duration if not set
+    sessionDuration = 25 * 60;
+    chrome.storage.sync.set({ sessionDuration: sessionDuration });
+  }
+  if (data.totalRuntime !== undefined) {
+    totalRuntime = data.totalRuntime;
+  }
+  if (data.sessionStartTime !== undefined && data.sessionStartTime !== null) {
+    sessionStartTime = data.sessionStartTime;
+  }
+
+  // Update total runtime display
+  updateTotalRuntimeDisplay();
+
   if (data.timerStartTime && !data.isPaused) {
     // Calculate remaining time
     const elapsed = Math.floor((Date.now() - data.timerStartTime) / 1000);
-    seconds = Math.max(0, seconds - elapsed);
-    updateTimeDisplay();
-    
-    if (seconds > 0) {
-      startTimer(false);
+    if (isBreak) {
+      breakSeconds = Math.max(0, breakSeconds - elapsed);
+      updateTimeDisplay();
+      if (breakSeconds > 0) {
+        startBreak(false);
+      } else {
+        // Break finished while popup was closed
+        endBreak();
+      }
     } else {
-      // Timer finished while popup was closed
-      chrome.storage.sync.set({ focus: false, timerStartTime: null, isPaused: false });
-      updateStatus(false);
+      seconds = Math.max(0, seconds - elapsed);
+      updateTimeDisplay();
+      
+      if (seconds > 0) {
+        startTimer(false);
+      } else {
+        // Timer finished while popup was closed
+        onTimerComplete();
+      }
     }
   } else if (data.isPaused) {
     isPaused = true;
@@ -133,18 +173,66 @@ blockListEl.addEventListener("click", e => {
 
 // Timer functions
 function updateTimeDisplay() {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const displaySeconds = isBreak ? breakSeconds : seconds;
+  const mins = Math.floor(displaySeconds / 60);
+  const secs = displaySeconds % 60;
   timeDisplay.textContent = `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
+// Calculate break duration based on session duration
+function getBreakDuration(sessionDurationSeconds) {
+  if (sessionDurationSeconds === 25 * 60) {
+    return 5 * 60; // 5 minutes for 25 min session
+  } else if (sessionDurationSeconds === 45 * 60) {
+    return 15 * 60; // 15 minutes for 45 min session
+  } else if (sessionDurationSeconds === 60 * 60) {
+    return 25 * 60; // 25 minutes for 60 min session
+  }
+  return 5 * 60; // Default 5 minutes
+}
+
+// Update total runtime display
+function updateTotalRuntimeDisplay() {
+  if (totalRuntimeEl) {
+    let displayRuntime = totalRuntime;
+    
+    // If there's an active session, add its elapsed time
+    if (sessionStartTime && !isBreak && !isPaused) {
+      const sessionElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+      displayRuntime += sessionElapsed;
+    }
+    
+    const hours = Math.floor(displayRuntime / 3600);
+    const minutes = Math.floor((displayRuntime % 3600) / 60);
+    const seconds = displayRuntime % 60;
+    
+    // Format: show hours, minutes, and seconds
+    let displayText = '';
+    if (hours > 0) {
+      displayText = `${hours}h ${minutes}m ${seconds}s`;
+    } else if (minutes > 0) {
+      displayText = `${minutes}m ${seconds}s`;
+    } else {
+      displayText = `${seconds}s`;
+    }
+    
+    totalRuntimeEl.textContent = displayText;
+  }
+}
+
 function updateStatus(isActive) {
-  if (isActive) {
+  if (isBreak) {
+    statusEl.textContent = "Break";
+    statusEl.classList.add("break");
+    statusEl.classList.remove("active");
+  } else if (isActive) {
     statusEl.textContent = "Active";
     statusEl.classList.add("active");
+    statusEl.classList.remove("break");
   } else {
     statusEl.textContent = "Inactive";
     statusEl.classList.remove("active");
+    statusEl.classList.remove("break");
   }
 }
 
@@ -152,14 +240,22 @@ function startTimer(saveState = true) {
   if (interval) clearInterval(interval);
   
   isPaused = false;
+  isBreak = false;
   timerStartTime = Date.now();
+  
+  // Track session start time for total runtime (only if starting a new session, not resuming)
+  if (!sessionStartTime && saveState) {
+    sessionStartTime = Date.now();
+  }
   
   if (saveState) {
     chrome.storage.sync.set({ 
       focus: true, 
       timerStartTime: timerStartTime,
       timerSeconds: seconds,
-      isPaused: false
+      isPaused: false,
+      isBreak: false,
+      sessionStartTime: sessionStartTime
     }, () => {
       // Ensure blocking rules are updated
       console.log("Focus mode activated - blocking should be active");
@@ -180,19 +276,100 @@ function startTimer(saveState = true) {
     if (seconds <= 0) {
       clearInterval(interval);
       interval = null;
-      chrome.storage.sync.set({ 
-        focus: false, 
-        timerStartTime: null,
-        timerSeconds: 25 * 60,
-        isPaused: false
-      });
-      updateStatus(false);
-      showStoppedState();
-      alert("🍅 Pomodoro Complete! Time for a break!");
-      seconds = 25 * 60;
-      updateTimeDisplay();
+      onTimerComplete();
     }
   }, 1000);
+}
+
+// Handle timer completion - start break
+function onTimerComplete() {
+  // Add completed session time to total runtime
+  // Use session duration since timer completed (accounting for any pauses/resumes)
+  totalRuntime += sessionDuration;
+  
+  // Calculate break duration
+  breakSeconds = getBreakDuration(sessionDuration);
+  
+  // Reset session start time
+  sessionStartTime = null;
+  
+  chrome.storage.sync.set({ 
+    focus: false, // Disable blocking during break
+    timerStartTime: null,
+    isPaused: false,
+    isBreak: true,
+    breakSeconds: breakSeconds,
+    totalRuntime: totalRuntime,
+    sessionStartTime: null // Reset session start time
+  });
+  
+  updateStatus(false);
+  updateTotalRuntimeDisplay();
+  alert(`🍅 Pomodoro Complete! Time for a ${Math.floor(breakSeconds / 60)} minute break!`);
+  
+  // Start break
+  startBreak();
+}
+
+// Start break timer
+function startBreak(saveState = true) {
+  if (interval) clearInterval(interval);
+  
+  isPaused = false;
+  isBreak = true;
+  timerStartTime = Date.now();
+  
+  if (saveState) {
+    chrome.storage.sync.set({ 
+      focus: false, // No blocking during break
+      timerStartTime: timerStartTime,
+      breakSeconds: breakSeconds,
+      isPaused: false,
+      isBreak: true
+    }, () => {
+      console.log("Break started - blocking disabled");
+      updateStatus(false);
+    });
+  }
+
+  showRunningState();
+
+  interval = setInterval(() => {
+    breakSeconds--;
+    updateTimeDisplay();
+
+    if (saveState) {
+      chrome.storage.sync.set({ breakSeconds: breakSeconds });
+    }
+
+    if (breakSeconds <= 0) {
+      clearInterval(interval);
+      interval = null;
+      endBreak();
+    }
+  }, 1000);
+}
+
+// End break and start new cycle
+function endBreak() {
+  chrome.storage.sync.set({ 
+    focus: false, 
+    timerStartTime: null,
+    isPaused: false,
+    isBreak: false,
+    breakSeconds: 0,
+    sessionStartTime: null // Reset for new cycle
+  });
+  
+  sessionStartTime = null; // Reset for new cycle
+  
+  updateStatus(false);
+  alert("Break complete! Starting new Pomodoro cycle.");
+  
+  // Reset timer to session duration and start new cycle
+  seconds = sessionDuration;
+  updateTimeDisplay();
+  startTimer();
 }
 
 function pauseTimer() {
@@ -202,42 +379,70 @@ function pauseTimer() {
   interval = null;
   isPaused = true;
   
-  chrome.storage.sync.set({ 
-    isPaused: true,
-    timerSeconds: seconds,
-    timerStartTime: null
-  });
+  if (isBreak) {
+    chrome.storage.sync.set({ 
+      isPaused: true,
+      breakSeconds: breakSeconds,
+      timerStartTime: null
+    });
+  } else {
+    chrome.storage.sync.set({ 
+      isPaused: true,
+      timerSeconds: seconds,
+      timerStartTime: null
+    });
+  }
   
   showPauseState();
 }
 
 function resumeTimer() {
-  if (seconds <= 0) return;
-  
-  isPaused = false;
-  timerStartTime = Date.now();
-  
-  chrome.storage.sync.set({ 
-    isPaused: false,
-    timerStartTime: timerStartTime,
-    timerSeconds: seconds
-  });
-  
-  startTimer(false);
+  if (isBreak) {
+    if (breakSeconds <= 0) return;
+    isPaused = false;
+    timerStartTime = Date.now();
+    
+    chrome.storage.sync.set({ 
+      isPaused: false,
+      timerStartTime: timerStartTime,
+      breakSeconds: breakSeconds
+    });
+    
+    startBreak(false);
+  } else {
+    if (seconds <= 0) return;
+    
+    isPaused = false;
+    timerStartTime = Date.now();
+    
+    chrome.storage.sync.set({ 
+      isPaused: false,
+      timerStartTime: timerStartTime,
+      timerSeconds: seconds
+    });
+    
+    startTimer(false);
+  }
 }
 
 function stopTimer() {
   clearInterval(interval);
   interval = null;
   isPaused = false;
-  seconds = 25 * 60;
+  isBreak = false;
+  seconds = sessionDuration;
+  breakSeconds = 0;
   timerStartTime = null;
+  sessionStartTime = null;
   
   chrome.storage.sync.set({ 
     focus: false, 
     timerStartTime: null,
-    timerSeconds: 25 * 60,
-    isPaused: false
+    timerSeconds: sessionDuration,
+    isPaused: false,
+    isBreak: false,
+    breakSeconds: 0,
+    sessionStartTime: null
   });
   
   updateStatus(false);
@@ -268,11 +473,19 @@ function showStoppedState() {
 
 // Timer controls
 startBtn.onclick = () => {
-  if (seconds <= 0) {
-    seconds = 25 * 60;
-    updateTimeDisplay();
+  if (isBreak) {
+    if (breakSeconds <= 0) {
+      breakSeconds = getBreakDuration(sessionDuration);
+      updateTimeDisplay();
+    }
+    startBreak();
+  } else {
+    if (seconds <= 0) {
+      seconds = sessionDuration;
+      updateTimeDisplay();
+    }
+    startTimer();
   }
-  startTimer();
 };
 
 pauseBtn.onclick = pauseTimer;
@@ -289,7 +502,11 @@ presetBtns.forEach(btn => {
     
     const minutes = parseInt(btn.dataset.minutes);
     seconds = minutes * 60;
+    sessionDuration = minutes * 60; // Update session duration
     updateTimeDisplay();
+    
+    // Save session duration
+    chrome.storage.sync.set({ sessionDuration: sessionDuration });
     
     // Update active preset
     presetBtns.forEach(b => b.classList.remove("active"));
@@ -297,18 +514,40 @@ presetBtns.forEach(btn => {
   };
 });
 
-// Update timer every second when popup is open and timer is running
+// Update timer display and sync state when popup is open
+// This only syncs the display - the main interval handles the actual countdown
 setInterval(() => {
-  if (interval && !isPaused) {
-    chrome.storage.sync.get(["timerStartTime", "timerSeconds"], data => {
+  // Only sync if timer is running but we don't have an active interval
+  // (this handles the case where timer was started when popup was closed)
+  if (!interval && !isPaused) {
+    chrome.storage.sync.get(["timerStartTime", "timerSeconds", "breakSeconds", "isBreak"], data => {
       if (data.timerStartTime && !isPaused) {
         const elapsed = Math.floor((Date.now() - data.timerStartTime) / 1000);
-        const remaining = Math.max(0, (data.timerSeconds || seconds) - elapsed);
-        if (remaining !== seconds) {
-          seconds = remaining;
-          updateTimeDisplay();
+        if (data.isBreak) {
+          const remaining = Math.max(0, (data.breakSeconds || breakSeconds) - elapsed);
+          if (remaining !== breakSeconds) {
+            breakSeconds = remaining;
+            updateTimeDisplay();
+            // If break finished, end it
+            if (breakSeconds <= 0) {
+              endBreak();
+            }
+          }
+        } else {
+          const remaining = Math.max(0, (data.timerSeconds || seconds) - elapsed);
+          if (remaining !== seconds) {
+            seconds = remaining;
+            updateTimeDisplay();
+            // If timer finished, complete it
+            if (seconds <= 0) {
+              onTimerComplete();
+            }
+          }
         }
       }
     });
   }
+  
+  // Update total runtime display
+  updateTotalRuntimeDisplay();
 }, 1000);

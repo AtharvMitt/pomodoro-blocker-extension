@@ -28,10 +28,30 @@ body {
   position: relative;
 }
 
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
 .header h1 {
   font-size: 24px;
   font-weight: 600;
-  margin-bottom: 8px;
+  flex: 1;
+  text-align: center;
+}
+
+.total-runtime {
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-weight: 500;
+  min-width: 60px;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .status {
@@ -45,6 +65,10 @@ body {
 
 .status.active {
   background: rgba(76, 175, 80, 0.3);
+}
+
+.status.break {
+  background: rgba(255, 193, 7, 0.3);
 }
 
 /* Timer Section */

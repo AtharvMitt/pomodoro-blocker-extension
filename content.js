@@ -135,20 +135,54 @@ function getVideoMetadata() {
   let title = '';
   let description = '';
   
-  // Try multiple selectors for title
+  // Try multiple selectors for title (expanded list with more variations)
   const titleSelectors = [
+    // Modern YouTube selectors
     'h1.ytd-watch-metadata yt-formatted-string',
     'h1.ytd-video-primary-info-renderer yt-formatted-string',
     'yt-formatted-string.style-scope.ytd-watch-metadata',
+    'h1.ytd-watch-metadata yt-formatted-string[class*="style-scope"]',
+    'h1 yt-formatted-string',
+    'h1[class*="watch"] yt-formatted-string',
+    'ytd-watch-metadata h1 yt-formatted-string',
+    'ytd-video-primary-info-renderer h1 yt-formatted-string',
+    // Meta tags (always available early)
     'meta[property="og:title"]',
-    'h1[class*="watch"]'
+    'meta[name="title"]',
+    // Fallback selectors
+    'h1[class*="watch"]',
+    'h1.title',
+    '#watch-headline-title',
+    // Try to get from any h1 in the main content area
+    '#primary h1',
+    'ytd-watch-flexy h1'
   ];
   
   for (const selector of titleSelectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      title = element.textContent || element.getAttribute('content') || element.innerText || '';
-      if (title) break;
+    try {
+      const element = document.querySelector(selector);
+      if (element) {
+        title = element.textContent || element.getAttribute('content') || element.innerText || element.title || '';
+        // Also try getting from aria-label
+        if (!title) {
+          title = element.getAttribute('aria-label') || '';
+        }
+        if (title && title.trim()) {
+          title = title.trim();
+          break;
+        }
+      }
+    } catch (e) {
+      // Continue to next selector
+      continue;
+    }
+  }
+  
+  // Fallback: Try to extract from page title (removes " - YouTube" suffix)
+  if (!title) {
+    const pageTitle = document.title;
+    if (pageTitle && pageTitle !== 'YouTube' && !pageTitle.startsWith('YouTube')) {
+      title = pageTitle.replace(/\s*-\s*YouTube\s*$/, '').trim();
     }
   }
   
@@ -156,15 +190,26 @@ function getVideoMetadata() {
   const descSelectors = [
     '#description yt-formatted-string',
     '#description-text',
+    'ytd-expander[class*="description"] yt-formatted-string',
+    'ytd-video-secondary-info-renderer #description yt-formatted-string',
     'meta[property="og:description"]',
-    'ytd-expander[class*="description"]'
+    'meta[name="description"]',
+    '#watch-description-text',
+    'ytd-watch-metadata #description'
   ];
   
   for (const selector of descSelectors) {
-    const element = document.querySelector(selector);
-    if (element) {
-      description = element.textContent || element.getAttribute('content') || element.innerText || '';
-      if (description) break;
+    try {
+      const element = document.querySelector(selector);
+      if (element) {
+        description = element.textContent || element.getAttribute('content') || element.innerText || '';
+        if (description && description.trim()) {
+          description = description.trim();
+          break;
+        }
+      }
+    } catch (e) {
+      continue;
     }
   }
   
@@ -174,26 +219,42 @@ function getVideoMetadata() {
   return { title: title.trim(), description: description.trim() };
 }
 
+// Wait for video title to appear with retries
+async function waitForVideoTitle(maxRetries = 10, delay = 200) {
+  for (let i = 0; i < maxRetries; i++) {
+    const { title } = getVideoMetadata();
+    if (title && title.trim()) {
+      return title;
+    }
+    // Wait before retrying
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+  return null;
+}
+
 // Check if video is educational using ML model
 async function checkVideoWithModel() {
   try {
     // Load model if not already loaded
     const classifier = await loadVideoClassifier();
     if (!classifier) {
-      console.log("Model not available, allowing video");
-      return true; // Allow if model fails to load
+      console.log("Model not available, blocking video for safety");
+      return false; // Block if model fails to load (safer for focus mode)
     }
     
-    // Get video metadata
-    const { title, description } = getVideoMetadata();
+    // Wait for title with retries (up to 2 seconds total)
+    const title = await waitForVideoTitle(10, 200);
     
     if (!title) {
-      console.log("Could not extract title, allowing video");
-      return true; // Allow if we can't get title
+      console.log("Could not extract title after retries, blocking video for safety");
+      return false; // Block if we can't get title (safer for focus mode)
     }
     
+    // Get description (may still be empty, that's okay)
+    const { description } = getVideoMetadata();
+    
     console.log("Video title:", title);
-    console.log("Video description:", description.substring(0, 100) + "...");
+    console.log("Video description:", description ? description.substring(0, 100) + "..." : "(none)");
     
     // Predict using ML model
     const result = classifier.predict(title, description);
@@ -201,7 +262,7 @@ async function checkVideoWithModel() {
     // Validate result
     if (!result || result.prediction === undefined) {
       console.error("Invalid prediction result:", result);
-      return true; // Allow on invalid result
+      return false; // Block on invalid result (safer for focus mode)
     }
     
     // Check for NaN values
@@ -214,7 +275,7 @@ async function checkVideoWithModel() {
         coefficientsLength: classifier.coefficients?.length,
         featuresLength: classifier.maxFeatures
       });
-      return true; // Allow on NaN (safer to allow than block)
+      return false; // Block on NaN (safer for focus mode)
     }
     
     console.log("ML Prediction:", result.prediction === 1 ? "Educational" : "Entertainment");
@@ -225,7 +286,7 @@ async function checkVideoWithModel() {
     return result.prediction === 1;
   } catch (error) {
     console.error("Error checking video with model:", error);
-    return true; // Allow on error
+    return false; // Block on error (safer for focus mode)
   }
 }
 
@@ -288,44 +349,84 @@ async function checkFocusMode() {
     if (path.includes("/watch")) {
       console.log("On video page - checking with ML model");
       
-      // Wait for page to load a bit, then check
-      setTimeout(async () => {
+      // Function to block the video page
+      function blockVideoPage(reason = "Entertainment Content Blocked") {
+        // Wait for body to exist
+        const waitForBody = setInterval(() => {
+          if (document.body) {
+            clearInterval(waitForBody);
+            document.body.innerHTML = `
+              <div style="
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                height: 100vh;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                text-align: center;
+                padding: 20px;
+              ">
+                <h1 style="font-size: 48px; margin-bottom: 20px;">❌</h1>
+                <h2 style="font-size: 28px; margin-bottom: 10px; font-weight: 600;">${reason}</h2>
+                <p style="font-size: 16px; opacity: 0.9;">Focus Mode is Active</p>
+                <p style="font-size: 14px; margin-top: 20px; opacity: 0.8;">Only educational videos are allowed during focus time</p>
+              </div>
+            `;
+          }
+        }, 10);
+      }
+      
+      // Check immediately and also set up observer for dynamic content
+      let checkPerformed = false;
+      
+      const performCheck = async () => {
+        if (checkPerformed) return;
+        checkPerformed = true;
+        
         const isEducational = await checkVideoWithModel();
         
         if (!isEducational) {
-          // Block entertainment video
-          console.log("Entertainment video detected - blocking");
-          
-          // Wait for body to exist
-          const waitForBody = setInterval(() => {
-            if (document.body) {
-              clearInterval(waitForBody);
-              document.body.innerHTML = `
-                <div style="
-                  display: flex;
-                  flex-direction: column;
-                  align-items: center;
-                  justify-content: center;
-                  height: 100vh;
-                  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                  color: white;
-                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                  text-align: center;
-                  padding: 20px;
-                ">
-                  <h1 style="font-size: 48px; margin-bottom: 20px;">❌</h1>
-                  <h2 style="font-size: 28px; margin-bottom: 10px; font-weight: 600;">Entertainment Content Blocked</h2>
-                  <p style="font-size: 16px; opacity: 0.9;">Focus Mode is Active</p>
-                  <p style="font-size: 14px; margin-top: 20px; opacity: 0.8;">Only educational videos are allowed during focus time</p>
-                </div>
-              `;
-            }
-          }, 10);
+          // Block entertainment video or video that couldn't be classified
+          console.log("Video blocked - not educational or classification failed");
+          blockVideoPage("Entertainment Content Blocked");
         } else {
           // Allow educational video - CSS already hides distractions
           console.log("Educational video detected - allowing with distractions removed");
         }
-      }, 1000); // Wait 1 second for page to load
+      };
+      
+      // Try checking after a short delay (for initial page load)
+      setTimeout(performCheck, 500);
+      
+      // Also set up a MutationObserver to catch when title appears
+      const titleObserver = new MutationObserver(() => {
+        if (!checkPerformed) {
+          const { title } = getVideoMetadata();
+          if (title && title.trim()) {
+            // Title appeared, perform check
+            setTimeout(performCheck, 100);
+          }
+        }
+      });
+      
+      // Observe the document for changes
+      if (document.body) {
+        titleObserver.observe(document.body, {
+          childList: true,
+          subtree: true
+        });
+        
+        // Stop observing after 5 seconds to avoid infinite observation
+        setTimeout(() => {
+          titleObserver.disconnect();
+          // If still not checked, perform final check
+          if (!checkPerformed) {
+            performCheck();
+          }
+        }, 5000);
+      }
     }
   } catch (error) {
     console.error("Error in YouTube blocking:", error);
